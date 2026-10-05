@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    # run as the host user so vendor/ and var/ stay writable outside the container
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      MAILER_DSN: smtp://mailpit:1025
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    command: >
+      sh -c "composer install --no-interaction
+      && bin/console doctrine:schema:update --force
+      && php -S 0.0.0.0:8000 -t public"
+    depends_on:
+      - mailpit
+
+  # catches outgoing mail; inbox UI on http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
