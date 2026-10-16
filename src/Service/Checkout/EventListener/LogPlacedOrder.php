@@ -8,11 +8,11 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 
 #[AsEventListener]
-final class LogPlacedOrder
+final readonly class LogPlacedOrder
 {
     public function __construct(
         #[Autowire('%kernel.logs_dir%')]
-        private readonly string $logDirectory,
+        private string $logDirectory,
     ) {
     }
 
