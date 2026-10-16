@@ -5,14 +5,14 @@ namespace App\Service\Checkout\Pricing;
 
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
-final class PriceCalculator
+final readonly class PriceCalculator
 {
     /**
      * @param iterable<Discount> $discounts Ordered by tag priority, highest first.
      */
     public function __construct(
         #[AutowireIterator('app.checkout.discount')]
-        private readonly iterable $discounts,
+        private iterable $discounts,
     ) {
     }
 
