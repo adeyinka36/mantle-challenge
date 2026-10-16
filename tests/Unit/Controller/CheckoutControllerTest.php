@@ -6,10 +6,12 @@ namespace App\Tests\Unit\Controller;
 use App\Controller\CheckoutController;
 use App\Entity\Customer;
 use App\Entity\Order;
+use App\Service\Checkout\Customers;
 use App\Service\Checkout\Event\OrderPlaced;
 use App\Service\Checkout\EventListener\LogPlacedOrder;
 use App\Service\Checkout\EventListener\SendOrderConfirmation;
 use App\Service\Checkout\EventListener\SendOrderSms;
+use App\Service\Checkout\OrderFactory;
 use App\Service\Checkout\PlaceOrder;
 use App\Service\Checkout\PlaceOrderData;
 use App\Service\Checkout\Pricing\FreeSamplePrice;
@@ -193,15 +195,18 @@ final class CheckoutControllerTest extends TestCase
         $dispatcher->addListener(OrderPlaced::class, new LogPlacedOrder($this->logsDir));
         $dispatcher->addListener(OrderPlaced::class, new SendOrderSms($this->smsSender));
 
+        $priceCalculator = new PriceCalculator([
+            new FreeSamplePrice(),
+            new VipDiscount(),
+            new StaffDiscount(),
+            new TradeDiscount(),
+        ]);
         $placeOrder = new PlaceOrder(
             $this->em,
-            new PriceCalculator([
-                new FreeSamplePrice(),
-                new VipDiscount(),
-                new StaffDiscount(),
-                new TradeDiscount(),
-            ]),
+            new Customers($this->em),
+            new OrderFactory($priceCalculator),
             $dispatcher,
+            3.50,
         );
         $controller = new CheckoutController();
 

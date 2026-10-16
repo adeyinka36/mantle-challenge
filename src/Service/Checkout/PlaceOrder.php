@@ -3,74 +3,43 @@ declare(strict_types=1);
 
 namespace App\Service\Checkout;
 
-use App\Entity\Customer;
-use App\Entity\Order;
-use App\Entity\OrderItem;
 use App\Service\Checkout\Event\OrderPlaced;
-use App\Service\Checkout\Pricing\PriceCalculator;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
-final class PlaceOrder
+final readonly class PlaceOrder
 {
-    public const GIFT_WRAP_PRICE = 3.50;
-
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PriceCalculator $priceCalculator,
-        private readonly EventDispatcherInterface $dispatcher,
+        private EntityManagerInterface $entityManager,
+        private Customers $customers,
+        private OrderFactory $orderFactory,
+        private EventDispatcherInterface $dispatcher,
+        #[Autowire('%env(float:GIFT_WRAP_PRICE)%')]
+        private float $giftWrapPrice,
     ) {
     }
 
     public function __invoke(PlaceOrderData $checkout): PlaceOrderResult
     {
-        $customer = $this->entityManager->getRepository(Customer::class)->findOneBy(['email' => $checkout->email]);
-        if (!$customer) {
-            $customer = new Customer();
-            $customer->setEmail($checkout->email);
-            $this->entityManager->persist($customer);
-        }
-        $customer->setType($checkout->customerType);
+        $customer = $this->customers->findOrCreate($checkout->email, $checkout->customerType);
+        $order = $this->orderFactory->fromCheckout($checkout, $customer);
 
-        $order = new Order();
-        $order->setCustomer($customer);
-        $order->setCreatedAt(new \DateTimeImmutable());
-
-        $subtotal = 0.0;
-        foreach ($checkout->cart as $cartLine) {
-            $item = new OrderItem();
-            $item->setSku($cartLine['sku']);
-            $item->setPrice((float) $cartLine['price']);
-            $item->setQty((int) $cartLine['qty']);
-            $order->addItem($item);
-
-            $subtotal += (float) $cartLine['price'] * (int) $cartLine['qty'];
-        }
-
-        $order->setSample($checkout->sample);
-        $total = $this->priceCalculator->total($subtotal, $checkout->customerType, $checkout->sample);
-
-        if ($checkout->gift) {
-            // gifting team: send it to the recipient instead
-            $order->setGift(true);
-            $order->setRecipientEmail($checkout->recipientEmail);
-        }
-
-        $order->setTotal((float) $total);
         $this->entityManager->persist($order);
         $this->entityManager->flush();
 
+        $total = (float) $order->getTotal();
         if ($order->isGift()) {
-            $total += self::GIFT_WRAP_PRICE;
+            $total += $this->giftWrapPrice;
         }
 
         $this->dispatcher->dispatch(new OrderPlaced(
             order: $order,
-            chargedTotal: (float) $total,
+            chargedTotal: $total,
             purchaserEmail: $checkout->email,
             mobile: $checkout->mobile,
         ));
 
-        return new PlaceOrderResult($order->getId(), (float) $total);
+        return new PlaceOrderResult($order->getId(), $total);
     }
 }
