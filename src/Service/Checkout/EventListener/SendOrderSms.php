@@ -8,10 +8,10 @@ use App\Service\Checkout\SmsSender;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 
 #[AsEventListener]
-final class SendOrderSms
+final readonly class SendOrderSms
 {
     public function __construct(
-        private readonly SmsSender $smsSender,
+        private SmsSender $smsSender,
     ) {
     }
 

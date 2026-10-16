@@ -5,12 +5,12 @@ namespace App\Service\Checkout\Event;
 
 use App\Entity\Order;
 
-final class OrderPlaced
+final readonly class OrderPlaced
 {
     public function __construct(
-        public readonly Order $order,
-        public readonly string $purchaserEmail,
-        public readonly ?string $mobile = null,
+        public Order   $order,
+        public string  $purchaserEmail,
+        public ?string $mobile = null,
     ) {
     }
 

@@ -5,6 +5,7 @@ namespace App\Service\Checkout\EventListener;
 
 use App\Service\Checkout\Event\OrderPlaced;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
 
@@ -16,6 +17,9 @@ final readonly class SendGiftNote
     ) {
     }
 
+    /**
+     * @throws TransportExceptionInterface
+     */
     public function __invoke(OrderPlaced $event): void
     {
         $recipientEmail = $event->order->getRecipientEmail();
