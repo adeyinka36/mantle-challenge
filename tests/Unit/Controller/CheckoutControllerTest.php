@@ -6,13 +6,17 @@ namespace App\Tests\Unit\Controller;
 use App\Controller\CheckoutController;
 use App\Entity\Customer;
 use App\Entity\Order;
+use App\Service\Checkout\PlaceOrder;
+use App\Service\Checkout\Pricing\FreeSamplePrice;
+use App\Service\Checkout\Pricing\PriceCalculator;
+use App\Service\Checkout\Pricing\StaffDiscount;
+use App\Service\Checkout\Pricing\TradeDiscount;
+use App\Service\Checkout\Pricing\VipDiscount;
 use App\Tests\Double\InMemoryMailer;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\DependencyInjection\Container;
-use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -20,7 +24,7 @@ use Symfony\Component\HttpFoundation\Request;
  * refactored safely. Gift orders and small trade orders are deliberately not
  * covered here, as their current behaviour is the subject of CHK-102 and CHK-104.
  *
- * The controller writes its own log file, so these tests point it at a
+ * PlaceOrder writes its own log file, so these tests point it at a
  * throwaway temp directory.
  */
 final class CheckoutControllerTest extends TestCase
@@ -169,14 +173,21 @@ final class CheckoutControllerTest extends TestCase
             ],
         ], $overrides);
 
-        $container = new Container();
-        $container->set('parameter_bag', new ParameterBag(['kernel.logs_dir' => $this->logsDir]));
-
+        $placeOrder = new PlaceOrder(
+            $this->em,
+            $this->mailer,
+            new PriceCalculator([
+                new FreeSamplePrice(),
+                new VipDiscount(),
+                new StaffDiscount(),
+                new TradeDiscount(),
+            ]),
+            $this->logsDir,
+        );
         $controller = new CheckoutController();
-        $controller->setContainer($container);
 
         $request = Request::create('/checkout', 'POST', content: json_encode($payload, \JSON_THROW_ON_ERROR));
-        $response = $controller->checkout($request, $this->em, $this->mailer);
+        $response = $controller->checkout($request, $placeOrder);
 
         return [
             'status' => $response->getStatusCode(),

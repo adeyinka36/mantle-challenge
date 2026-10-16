@@ -6,6 +6,7 @@ namespace App\Service\Checkout;
 use App\Entity\Customer;
 use App\Entity\Order;
 use App\Entity\OrderItem;
+use App\Service\Checkout\Pricing\PriceCalculator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Mailer\MailerInterface;
@@ -18,6 +19,7 @@ final class PlaceOrder
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly MailerInterface $mailer,
+        private readonly PriceCalculator $priceCalculator,
         #[Autowire('%kernel.logs_dir%')]
         private readonly string $logDirectory,
     ) {
@@ -37,7 +39,7 @@ final class PlaceOrder
         $order->setCustomer($customer);
         $order->setCreatedAt(new \DateTimeImmutable());
 
-        $total = 0;
+        $subtotal = 0.0;
         foreach ($checkout->cart as $cartLine) {
             $item = new OrderItem();
             $item->setSku($cartLine['sku']);
@@ -45,20 +47,12 @@ final class PlaceOrder
             $item->setQty((int) $cartLine['qty']);
             $order->addItem($item);
 
-            $total += $cartLine['price'] * $cartLine['qty'];
+            $subtotal += $cartLine['price'] * $cartLine['qty'];
         }
 
-        if ($checkout->sample) {
-            // warehouse team: free product samples go through checkout too
-            $order->setSample(true);
-            $total = 0;
-        } elseif ($customer->getType() === 'vip') {
-            $total *= 0.8;
-        } elseif ($customer->getType() === 'staff') {
-            $total *= 0.5;
-        } elseif ($customer->getType() === 'trade') {
-            $total = $total * 0.9 - 5;
-        }
+        $order->setSample($checkout->sample);
+        $customerType = $customer->getType() ?? 'regular';
+        $total = $this->priceCalculator->total($subtotal, $customerType, $checkout->sample);
 
         $recipient = $checkout->email;
         if ($checkout->gift) {
