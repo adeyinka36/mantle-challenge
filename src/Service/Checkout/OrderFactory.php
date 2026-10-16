@@ -41,7 +41,7 @@ final readonly class OrderFactory
         if ($checkout->gift && !$checkout->sample) {
             $total += $this->giftWrapPrice;
         }
-        $order->setTotal($total);
+        $order->setTotal(max(0.0, $total));
 
         if ($checkout->gift) {
             $order->setGift(true);
