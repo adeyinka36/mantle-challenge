@@ -6,21 +6,17 @@ namespace App\Controller;
 use App\Service\Checkout\PlaceOrder;
 use App\Service\Checkout\PlaceOrderData;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Routing\Attribute\Route;
 
 class CheckoutController
 {
     #[Route('/checkout', methods: ['POST'])]
-    public function checkout(Request $request, PlaceOrder $placeOrder): JsonResponse
-    {
-        $payload = json_decode($request->getContent(), true);
-
-        if (!is_array($payload) || empty($payload['cart'])) {
-            return new JsonResponse(['error' => 'Empty cart'], 500);
-        }
-
-        $result = $placeOrder(PlaceOrderData::fromPayload($payload));
+    public function checkout(
+        #[MapRequestPayload] PlaceOrderData $checkout,
+        PlaceOrder $placeOrder,
+    ): JsonResponse {
+        $result = $placeOrder($checkout);
 
         return new JsonResponse([
             'id' => $result->orderId,

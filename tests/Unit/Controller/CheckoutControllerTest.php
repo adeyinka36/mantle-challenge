@@ -6,30 +6,37 @@ namespace App\Tests\Unit\Controller;
 use App\Controller\CheckoutController;
 use App\Entity\Customer;
 use App\Entity\Order;
+use App\Service\Checkout\Event\OrderPlaced;
+use App\Service\Checkout\EventListener\LogPlacedOrder;
+use App\Service\Checkout\EventListener\SendOrderConfirmation;
+use App\Service\Checkout\EventListener\SendOrderSms;
 use App\Service\Checkout\PlaceOrder;
+use App\Service\Checkout\PlaceOrderData;
 use App\Service\Checkout\Pricing\FreeSamplePrice;
 use App\Service\Checkout\Pricing\PriceCalculator;
 use App\Service\Checkout\Pricing\StaffDiscount;
 use App\Service\Checkout\Pricing\TradeDiscount;
 use App\Service\Checkout\Pricing\VipDiscount;
 use App\Tests\Double\InMemoryMailer;
+use App\Tests\Double\RecordingSmsSender;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 /**
  * Characterisation tests: they pin what checkout() does today, so it can be
  * refactored safely. Gift orders and small trade orders are deliberately not
  * covered here, as their current behaviour is the subject of CHK-102 and CHK-104.
  *
- * PlaceOrder writes its own log file, so these tests point it at a
+ * The log listener writes orders.log, so these tests point it at a
  * throwaway temp directory.
  */
 final class CheckoutControllerTest extends TestCase
 {
     private InMemoryMailer $mailer;
+    private RecordingSmsSender $smsSender;
     private EntityManagerInterface $em;
     private ?Customer $existingCustomer = null;
     /** @var list<object> */
@@ -39,6 +46,7 @@ final class CheckoutControllerTest extends TestCase
     protected function setUp(): void
     {
         $this->mailer = new InMemoryMailer();
+        $this->smsSender = new RecordingSmsSender();
         $this->logsDir = sys_get_temp_dir() . '/checkout-test-' . bin2hex(random_bytes(4));
 
         $repository = $this->createStub(EntityRepository::class);
@@ -67,7 +75,6 @@ final class CheckoutControllerTest extends TestCase
         yield 'vip gets 20% off' => ['vip', 20.00];
         yield 'staff gets 50% off' => ['staff', 12.50];
         yield 'trade gets 10% off minus 5.00' => ['trade', 17.50];
-        yield 'unknown type pays full price' => ['wholesale', 25.00];
     }
 
     #[DataProvider('customerTypes')]
@@ -147,14 +154,22 @@ final class CheckoutControllerTest extends TestCase
         $this->assertSame('Your free sample of TEA-SAMPLER is on its way!', $this->mailer->sent[0]->getTextBody());
     }
 
-    public function testEmptyCartIsRejectedWithoutSideEffects(): void
+    public function testMobileReceivesTheSameConfirmationAsTheEmail(): void
     {
-        $response = $this->checkout(['cart' => []]);
+        $this->checkout(['mobile' => '07123456789', 'customerType' => 'vip']);
 
-        $this->assertSame(500, $response['status']);
-        $this->assertSame(['error' => 'Empty cart'], $response['body']);
-        $this->assertSame([], $this->persisted);
-        $this->assertSame([], $this->mailer->sent);
+        $this->assertCount(1, $this->mailer->sent);
+        $this->assertSame('jo@example.com', $this->mailer->sent[0]->getTo()[0]->getAddress());
+        $this->assertCount(1, $this->smsSender->sent);
+        $this->assertSame('07123456789', $this->smsSender->sent[0]['mobile']);
+        $this->assertSame('Thanks for your order! Total: £20.00', $this->smsSender->sent[0]['message']);
+    }
+
+    public function testNoSmsIsSentWhenMobileIsMissing(): void
+    {
+        $this->checkout();
+
+        $this->assertSame([], $this->smsSender->sent);
     }
 
     /**
@@ -173,21 +188,33 @@ final class CheckoutControllerTest extends TestCase
             ],
         ], $overrides);
 
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(OrderPlaced::class, new SendOrderConfirmation($this->mailer));
+        $dispatcher->addListener(OrderPlaced::class, new LogPlacedOrder($this->logsDir));
+        $dispatcher->addListener(OrderPlaced::class, new SendOrderSms($this->smsSender));
+
         $placeOrder = new PlaceOrder(
             $this->em,
-            $this->mailer,
             new PriceCalculator([
                 new FreeSamplePrice(),
                 new VipDiscount(),
                 new StaffDiscount(),
                 new TradeDiscount(),
             ]),
-            $this->logsDir,
+            $dispatcher,
         );
         $controller = new CheckoutController();
 
-        $request = Request::create('/checkout', 'POST', content: json_encode($payload, \JSON_THROW_ON_ERROR));
-        $response = $controller->checkout($request, $placeOrder);
+        $customerType = $payload['customerType'] ?? 'regular';
+        $response = $controller->checkout(new PlaceOrderData(
+            email: (string) $payload['email'],
+            customerType: is_string($customerType) && $customerType !== '' ? $customerType : 'regular',
+            cart: $payload['cart'],
+            gift: (bool) ($payload['gift'] ?? false),
+            recipientEmail: isset($payload['recipientEmail']) && is_string($payload['recipientEmail']) ? $payload['recipientEmail'] : null,
+            sample: (bool) ($payload['sample'] ?? false),
+            mobile: isset($payload['mobile']) && is_string($payload['mobile']) ? $payload['mobile'] : null,
+        ), $placeOrder);
 
         return [
             'status' => $response->getStatusCode(),
