@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Service\Checkout;
 
 use App\Entity\Customer;
+use App\Enum\CustomerType;
 use App\Service\Checkout\Customers;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -34,21 +35,21 @@ final class CustomersTest extends TestCase
 
     public function testCreatesACustomerWhenTheEmailIsNew(): void
     {
-        $customer = $this->customers->findOrCreate('new@example.com', 'vip');
+        $customer = $this->customers->findOrCreate('new@example.com', CustomerType::Vip);
 
         $this->assertSame([$customer], $this->persisted);
         $this->assertSame('new@example.com', $customer->getEmail());
-        $this->assertSame('vip', $customer->getType());
+        $this->assertSame(CustomerType::Vip, $customer->getType());
     }
 
     public function testReusesAnExistingCustomerAndUpdatesTheirType(): void
     {
-        $this->existingCustomer = (new Customer())->setEmail('jo@example.com')->setType('regular');
+        $this->existingCustomer = (new Customer())->setEmail('jo@example.com')->setType(CustomerType::Regular);
 
-        $customer = $this->customers->findOrCreate('jo@example.com', 'staff');
+        $customer = $this->customers->findOrCreate('jo@example.com', CustomerType::Staff);
 
         $this->assertSame($this->existingCustomer, $customer);
-        $this->assertSame('staff', $customer->getType());
+        $this->assertSame(CustomerType::Staff, $customer->getType());
         $this->assertSame([], $this->persisted);
     }
 }

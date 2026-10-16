@@ -5,7 +5,6 @@ namespace App\Service\Checkout;
 
 use App\Service\Checkout\Event\OrderPlaced;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 final readonly class PlaceOrder
@@ -15,8 +14,6 @@ final readonly class PlaceOrder
         private Customers $customers,
         private OrderFactory $orderFactory,
         private EventDispatcherInterface $dispatcher,
-        #[Autowire('%env(float:GIFT_WRAP_PRICE)%')]
-        private float $giftWrapPrice,
     ) {
     }
 
@@ -28,18 +25,12 @@ final readonly class PlaceOrder
         $this->entityManager->persist($order);
         $this->entityManager->flush();
 
-        $total = (float) $order->getTotal();
-        if ($order->isGift()) {
-            $total += $this->giftWrapPrice;
-        }
-
         $this->dispatcher->dispatch(new OrderPlaced(
             order: $order,
-            chargedTotal: $total,
             purchaserEmail: $checkout->email,
             mobile: $checkout->mobile,
         ));
 
-        return new PlaceOrderResult($order->getId(), $total);
+        return new PlaceOrderResult($order->getId(), (float) $order->getTotal());
     }
 }

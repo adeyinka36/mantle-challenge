@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Service\Checkout;
 
 use App\Entity\Customer;
+use App\Enum\CustomerType;
 use App\Service\Checkout\OrderFactory;
 use App\Service\Checkout\PlaceOrderData;
 use App\Service\Checkout\Pricing\FreeSamplePrice;
@@ -20,7 +21,7 @@ final class OrderFactoryTest extends TestCase
         $this->orderFactory = new OrderFactory(new PriceCalculator([
             new FreeSamplePrice(),
             new VipDiscount(),
-        ]));
+        ]), 3.50);
     }
 
     public function testBuildsTheOrderFromTheCart(): void
@@ -49,7 +50,7 @@ final class OrderFactoryTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $order->getTotal(), 0.001);
     }
 
-    public function testAGiftIsMarkedWithoutAddingGiftWrap(): void
+    public function testAGiftIncludesGiftWrap(): void
     {
         $order = $this->orderFactory->fromCheckout(
             $this->checkout(gift: true, recipientEmail: 'sam@example.com'),
@@ -58,19 +59,31 @@ final class OrderFactoryTest extends TestCase
 
         $this->assertTrue($order->isGift());
         $this->assertSame('sam@example.com', $order->getRecipientEmail());
-        $this->assertEqualsWithDelta(16.0, $order->getTotal(), 0.001);
+        $this->assertEqualsWithDelta(19.50, $order->getTotal(), 0.001);
+    }
+
+    public function testASampleGiftStaysFree(): void
+    {
+        $order = $this->orderFactory->fromCheckout(
+            $this->checkout(gift: true, recipientEmail: 'sam@example.com', sample: true),
+            $this->customer(),
+        );
+
+        $this->assertTrue($order->isGift());
+        $this->assertTrue($order->isSample());
+        $this->assertEqualsWithDelta(0.0, $order->getTotal(), 0.001);
     }
 
     private function customer(): Customer
     {
-        return (new Customer())->setEmail('jo@example.com')->setType('vip');
+        return (new Customer())->setEmail('jo@example.com')->setType(CustomerType::Vip);
     }
 
     private function checkout(bool $gift = false, ?string $recipientEmail = null, bool $sample = false): PlaceOrderData
     {
         return new PlaceOrderData(
             email: 'jo@example.com',
-            customerType: 'vip',
+            customerType: CustomerType::Vip,
             cart: [['sku' => 'MUG-01', 'price' => 10.0, 'qty' => 2]],
             gift: $gift,
             recipientEmail: $recipientEmail,

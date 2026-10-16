@@ -6,9 +6,11 @@ namespace App\Tests\Unit\Controller;
 use App\Controller\CheckoutController;
 use App\Entity\Customer;
 use App\Entity\Order;
+use App\Enum\CustomerType;
 use App\Service\Checkout\Customers;
 use App\Service\Checkout\Event\OrderPlaced;
 use App\Service\Checkout\EventListener\LogPlacedOrder;
+use App\Service\Checkout\EventListener\SendGiftNote;
 use App\Service\Checkout\EventListener\SendOrderConfirmation;
 use App\Service\Checkout\EventListener\SendOrderSms;
 use App\Service\Checkout\OrderFactory;
@@ -17,6 +19,7 @@ use App\Service\Checkout\PlaceOrderData;
 use App\Service\Checkout\Pricing\FreeSamplePrice;
 use App\Service\Checkout\Pricing\PriceCalculator;
 use App\Service\Checkout\Pricing\StaffDiscount;
+use App\Service\Checkout\Pricing\StudentDiscount;
 use App\Service\Checkout\Pricing\TradeDiscount;
 use App\Service\Checkout\Pricing\VipDiscount;
 use App\Tests\Double\InMemoryMailer;
@@ -29,8 +32,8 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 
 /**
  * Characterisation tests: they pin what checkout() does today, so it can be
- * refactored safely. Gift orders and small trade orders are deliberately not
- * covered here, as their current behaviour is the subject of CHK-102 and CHK-104.
+ * refactored safely. Small trade orders are deliberately not covered here,
+ * as their current behaviour is the subject of CHK-104.
  *
  * The log listener writes orders.log, so these tests point it at a
  * throwaway temp directory.
@@ -77,6 +80,7 @@ final class CheckoutControllerTest extends TestCase
         yield 'vip gets 20% off' => ['vip', 20.00];
         yield 'staff gets 50% off' => ['staff', 12.50];
         yield 'trade gets 10% off minus 5.00' => ['trade', 17.50];
+        yield 'student gets 15% off' => ['student', 21.25];
     }
 
     #[DataProvider('customerTypes')]
@@ -94,7 +98,7 @@ final class CheckoutControllerTest extends TestCase
         $response = $this->checkout(['customerType' => null]);
 
         $this->assertEqualsWithDelta(25.00, $response['body']['total'], 0.001);
-        $this->assertSame('regular', $this->persistedOrder()->getCustomer()?->getType());
+        $this->assertSame(CustomerType::Regular, $this->persistedOrder()->getCustomer()?->getType());
     }
 
     public function testOrderIsPersistedWithItsItems(): void
@@ -116,18 +120,18 @@ final class CheckoutControllerTest extends TestCase
         $customers = array_values(array_filter($this->persisted, fn (object $e) => $e instanceof Customer));
         $this->assertCount(1, $customers);
         $this->assertSame('new@example.com', $customers[0]->getEmail());
-        $this->assertSame('vip', $customers[0]->getType());
+        $this->assertSame(CustomerType::Vip, $customers[0]->getType());
         $this->assertSame($customers[0], $this->persistedOrder()->getCustomer());
     }
 
     public function testExistingCustomerIsReusedAndTheirTypeUpdated(): void
     {
-        $this->existingCustomer = (new Customer())->setEmail('jo@example.com')->setType('regular');
+        $this->existingCustomer = (new Customer())->setEmail('jo@example.com')->setType(CustomerType::Regular);
 
         $this->checkout(['customerType' => 'staff']);
 
         $this->assertSame($this->existingCustomer, $this->persistedOrder()->getCustomer());
-        $this->assertSame('staff', $this->existingCustomer->getType());
+        $this->assertSame(CustomerType::Staff, $this->existingCustomer->getType());
         $this->assertEmpty(array_filter($this->persisted, fn (object $e) => $e instanceof Customer));
     }
 
@@ -154,6 +158,28 @@ final class CheckoutControllerTest extends TestCase
         $this->assertTrue($this->persistedOrder()->isSample());
         $this->assertEqualsWithDelta(0.0, $this->persistedOrder()->getTotal(), 0.001);
         $this->assertSame('Your free sample of TEA-SAMPLER is on its way!', $this->mailer->sent[0]->getTextBody());
+    }
+
+    public function testGiftOrderSavesTheWrapAndEmailsBothPeople(): void
+    {
+        $response = $this->checkout([
+            'customerType' => 'vip',
+            'gift' => true,
+            'recipientEmail' => 'sam@example.com',
+        ]);
+
+        $this->assertEqualsWithDelta(23.50, $response['body']['total'], 0.001);
+        $this->assertTrue($this->persistedOrder()->isGift());
+        $this->assertEqualsWithDelta(23.50, $this->persistedOrder()->getTotal(), 0.001);
+
+        $this->assertCount(2, $this->mailer->sent);
+        $purchaser = $this->mailer->sent[0];
+        $recipient = $this->mailer->sent[1];
+        $this->assertSame('jo@example.com', $purchaser->getTo()[0]->getAddress());
+        $this->assertSame('Thanks for your order! Total: £23.50', $purchaser->getTextBody());
+        $this->assertSame('sam@example.com', $recipient->getTo()[0]->getAddress());
+        $this->assertSame('A gift for you', $recipient->getSubject());
+        $this->assertSame('A gift is on its way to you.', $recipient->getTextBody());
     }
 
     public function testMobileReceivesTheSameConfirmationAsTheEmail(): void
@@ -192,6 +218,7 @@ final class CheckoutControllerTest extends TestCase
 
         $dispatcher = new EventDispatcher();
         $dispatcher->addListener(OrderPlaced::class, new SendOrderConfirmation($this->mailer));
+        $dispatcher->addListener(OrderPlaced::class, new SendGiftNote($this->mailer));
         $dispatcher->addListener(OrderPlaced::class, new LogPlacedOrder($this->logsDir));
         $dispatcher->addListener(OrderPlaced::class, new SendOrderSms($this->smsSender));
 
@@ -200,20 +227,20 @@ final class CheckoutControllerTest extends TestCase
             new VipDiscount(),
             new StaffDiscount(),
             new TradeDiscount(),
+            new StudentDiscount(),
         ]);
         $placeOrder = new PlaceOrder(
             $this->em,
             new Customers($this->em),
-            new OrderFactory($priceCalculator),
+            new OrderFactory($priceCalculator, 3.50),
             $dispatcher,
-            3.50,
         );
         $controller = new CheckoutController();
 
-        $customerType = $payload['customerType'] ?? 'regular';
+        $customerType = $payload['customerType'] ?? null;
         $response = $controller->checkout(new PlaceOrderData(
             email: (string) $payload['email'],
-            customerType: is_string($customerType) && $customerType !== '' ? $customerType : 'regular',
+            customerType: is_string($customerType) && $customerType !== '' ? CustomerType::from($customerType) : CustomerType::Regular,
             cart: $payload['cart'],
             gift: (bool) ($payload['gift'] ?? false),
             recipientEmail: isset($payload['recipientEmail']) && is_string($payload['recipientEmail']) ? $payload['recipientEmail'] : null,

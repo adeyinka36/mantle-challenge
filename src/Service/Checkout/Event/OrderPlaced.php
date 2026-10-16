@@ -9,8 +9,6 @@ final class OrderPlaced
 {
     public function __construct(
         public readonly Order $order,
-        /** Total told to the customer. Gift wrap is included here, and not yet on the saved order. */
-        public readonly float $chargedTotal,
         public readonly string $purchaserEmail,
         public readonly ?string $mobile = null,
     ) {
@@ -25,15 +23,6 @@ final class OrderPlaced
             return 'Your free sample of ' . $sku . ' is on its way!';
         }
 
-        return 'Thanks for your order! Total: £' . number_format($this->chargedTotal, 2);
-    }
-
-    public function emailRecipient(): string
-    {
-        if ($this->order->isGift()) {
-            return (string) $this->order->getRecipientEmail();
-        }
-
-        return $this->purchaserEmail;
+        return 'Thanks for your order! Total: £' . number_format((float) $this->order->getTotal(), 2);
     }
 }

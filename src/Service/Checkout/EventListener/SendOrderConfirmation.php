@@ -9,10 +9,10 @@ use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
 
 #[AsEventListener]
-final class SendOrderConfirmation
+final readonly class SendOrderConfirmation
 {
     public function __construct(
-        private readonly MailerInterface $mailer,
+        private MailerInterface $mailer,
     ) {
     }
 
@@ -21,7 +21,7 @@ final class SendOrderConfirmation
         $this->mailer->send(
             (new Email())
                 ->from('shop@example.com')
-                ->to($event->emailRecipient())
+                ->to($event->purchaserEmail)
                 ->subject('Your order')
                 ->text($event->confirmationText())
         );

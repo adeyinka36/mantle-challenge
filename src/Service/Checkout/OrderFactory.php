@@ -7,11 +7,14 @@ use App\Entity\Customer;
 use App\Entity\Order;
 use App\Entity\OrderItem;
 use App\Service\Checkout\Pricing\PriceCalculator;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final readonly class OrderFactory
 {
     public function __construct(
         private PriceCalculator $priceCalculator,
+        #[Autowire('%env(float:GIFT_WRAP_PRICE)%')]
+        private float $giftWrapPrice,
     ) {
     }
 
@@ -33,7 +36,12 @@ final readonly class OrderFactory
         }
 
         $order->setSample($checkout->sample);
-        $order->setTotal($this->priceCalculator->total($subtotal, $checkout->customerType, $checkout->sample));
+
+        $total = $this->priceCalculator->total($subtotal, $checkout->customerType, $checkout->sample);
+        if ($checkout->gift && !$checkout->sample) {
+            $total += $this->giftWrapPrice;
+        }
+        $order->setTotal($total);
 
         if ($checkout->gift) {
             $order->setGift(true);

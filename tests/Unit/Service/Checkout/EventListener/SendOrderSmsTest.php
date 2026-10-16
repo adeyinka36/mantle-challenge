@@ -23,7 +23,7 @@ final class SendOrderSmsTest extends TestCase
 
     public function testSendsTheConfirmationWhenAMobileIsPresent(): void
     {
-        ($this->listener)(new OrderPlaced($this->order(), 20.0, 'jo@example.com', '07123456789'));
+        ($this->listener)(new OrderPlaced($this->order(), 'jo@example.com', '07123456789'));
 
         $this->assertSame([
             ['mobile' => '07123456789', 'message' => 'Thanks for your order! Total: £20.00'],
@@ -32,7 +32,7 @@ final class SendOrderSmsTest extends TestCase
 
     public function testSendsNothingWhenMobileIsMissing(): void
     {
-        ($this->listener)(new OrderPlaced($this->order(), 20.0, 'jo@example.com'));
+        ($this->listener)(new OrderPlaced($this->order(), 'jo@example.com'));
 
         $this->assertSame([], $this->smsSender->sent);
     }
@@ -42,7 +42,7 @@ final class SendOrderSmsTest extends TestCase
         $order = $this->order();
         $order->setSample(true);
 
-        ($this->listener)(new OrderPlaced($order, 0.0, 'jo@example.com', '07123456789'));
+        ($this->listener)(new OrderPlaced($order, 'jo@example.com', '07123456789'));
 
         $this->assertSame('Your free sample of TEA-01 is on its way!', $this->smsSender->sent[0]['message']);
     }
@@ -55,6 +55,7 @@ final class SendOrderSmsTest extends TestCase
         $item->setPrice(5.0);
         $item->setQty(1);
         $order->addItem($item);
+        $order->setTotal(20.0);
 
         return $order;
     }

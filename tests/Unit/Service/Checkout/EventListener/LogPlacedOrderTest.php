@@ -27,7 +27,7 @@ final class LogPlacedOrderTest extends TestCase
     {
         $listener = new LogPlacedOrder($this->logDirectory);
 
-        $listener(new OrderPlaced(new Order(), 25.0, 'jo@example.com'));
+        $listener(new OrderPlaced(new Order(), 'jo@example.com'));
 
         $line = (string) file_get_contents($this->logDirectory . '/orders.log');
         $this->assertMatchesRegularExpression(
