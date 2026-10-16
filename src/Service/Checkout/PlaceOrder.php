@@ -39,12 +39,12 @@ final class PlaceOrder
         $subtotal = 0.0;
         foreach ($checkout->cart as $cartLine) {
             $item = new OrderItem();
-            $item->setSku($cartLine->sku);
-            $item->setPrice($cartLine->price);
-            $item->setQty($cartLine->qty);
+            $item->setSku($cartLine['sku']);
+            $item->setPrice((float) $cartLine['price']);
+            $item->setQty((int) $cartLine['qty']);
             $order->addItem($item);
 
-            $subtotal += $cartLine->price * $cartLine->qty;
+            $subtotal += (float) $cartLine['price'] * (int) $cartLine['qty'];
         }
 
         $order->setSample($checkout->sample);
