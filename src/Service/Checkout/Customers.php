@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Checkout;
 
 use App\Entity\Customer;
+use App\Enum\CustomerType;
 use Doctrine\ORM\EntityManagerInterface;
 
 final readonly class Customers
@@ -13,7 +14,7 @@ final readonly class Customers
     ) {
     }
 
-    public function findOrCreate(string $email, string $customerType): Customer
+    public function findOrCreate(string $email, CustomerType $customerType): Customer
     {
         $customer = $this->entityManager->getRepository(Customer::class)->findOneBy(['email' => $email]);
 

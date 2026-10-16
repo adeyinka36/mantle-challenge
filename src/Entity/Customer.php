@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\CustomerType;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -16,11 +17,8 @@ class Customer
     #[ORM\Column(length: 180, unique: true)]
     private ?string $email = null;
 
-    /**
-     * One of: regular, vip, staff, trade.
-     */
-    #[ORM\Column(length: 20)]
-    private ?string $type = null;
+    #[ORM\Column(length: 20, enumType: CustomerType::class)]
+    private ?CustomerType $type = null;
 
     public function getId(): ?int
     {
@@ -39,12 +37,12 @@ class Customer
         return $this;
     }
 
-    public function getType(): ?string
+    public function getType(): ?CustomerType
     {
         return $this->type;
     }
 
-    public function setType(string $type): static
+    public function setType(CustomerType $type): static
     {
         $this->type = $type;
 

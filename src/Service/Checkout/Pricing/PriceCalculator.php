@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Checkout\Pricing;
 
+use App\Enum\CustomerType;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 final readonly class PriceCalculator
@@ -16,7 +17,7 @@ final readonly class PriceCalculator
     ) {
     }
 
-    public function total(float $subtotal, string $customerType, bool $isSample): float
+    public function total(float $subtotal, CustomerType $customerType, bool $isSample): float
     {
         foreach ($this->discounts as $discount) {
             if ($discount->supports($customerType, $isSample)) {
