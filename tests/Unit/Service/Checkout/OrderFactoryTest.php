@@ -9,6 +9,7 @@ use App\Service\Checkout\OrderFactory;
 use App\Service\Checkout\PlaceOrderData;
 use App\Service\Checkout\Pricing\FreeSamplePrice;
 use App\Service\Checkout\Pricing\PriceCalculator;
+use App\Service\Checkout\Pricing\TradeDiscount;
 use App\Service\Checkout\Pricing\VipDiscount;
 use PHPUnit\Framework\TestCase;
 
@@ -72,6 +73,44 @@ final class OrderFactoryTest extends TestCase
         $this->assertTrue($order->isGift());
         $this->assertTrue($order->isSample());
         $this->assertEqualsWithDelta(0.0, $order->getTotal(), 0.001);
+    }
+
+    public function testASmallTradeOrderCannotGoBelowZero(): void
+    {
+        $orderFactory = new OrderFactory(new PriceCalculator([
+            new TradeDiscount(),
+        ]), 3.50);
+
+        $order = $orderFactory->fromCheckout(
+            new PlaceOrderData(
+                email: 'jo@example.com',
+                customerType: CustomerType::Trade,
+                cart: [['sku' => 'TEA-01', 'price' => 5.0, 'qty' => 1]],
+            ),
+            (new Customer())->setEmail('jo@example.com')->setType(CustomerType::Trade),
+        );
+
+        $this->assertEqualsWithDelta(0.0, $order->getTotal(), 0.001);
+    }
+
+    public function testGiftWrapIsAddedBeforeTheTotalIsFloored(): void
+    {
+        $orderFactory = new OrderFactory(new PriceCalculator([
+            new TradeDiscount(),
+        ]), 3.50);
+
+        $order = $orderFactory->fromCheckout(
+            new PlaceOrderData(
+                email: 'jo@example.com',
+                customerType: CustomerType::Trade,
+                cart: [['sku' => 'TEA-01', 'price' => 5.0, 'qty' => 1]],
+                gift: true,
+                recipientEmail: 'sam@example.com',
+            ),
+            (new Customer())->setEmail('jo@example.com')->setType(CustomerType::Trade),
+        );
+
+        $this->assertEqualsWithDelta(3.0, $order->getTotal(), 0.001);
     }
 
     private function customer(): Customer
