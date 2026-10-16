@@ -12,9 +12,12 @@ use Symfony\Component\Mime\Email;
 
 final class CheckoutTest extends WebTestCase
 {
+    /**
+     * @throws \JsonException
+     */
     public function testAGiftOrderIsSavedAndBothEmailsAreSent(): void
     {
-        $client = static::createClient();
+        $client = CheckoutTest::createClient();
         $this->createSchema();
         $emails = new \ArrayObject();
         $this->recordEmails($emails);
@@ -34,7 +37,7 @@ final class CheckoutTest extends WebTestCase
         $body = json_decode((string) $client->getResponse()->getContent(), true, flags: \JSON_THROW_ON_ERROR);
         self::assertEqualsWithDelta(23.50, $body['total'], 0.001);
 
-        $order = static::getContainer()->get(EntityManagerInterface::class)->find(Order::class, $body['id']);
+        $order = CheckoutTest::getContainer()->get(EntityManagerInterface::class)->find(Order::class, $body['id']);
         self::assertInstanceOf(Order::class, $order);
         self::assertEqualsWithDelta(23.50, $order->getTotal(), 0.001);
         self::assertTrue($order->isGift());
@@ -49,7 +52,7 @@ final class CheckoutTest extends WebTestCase
 
     public function testAnEmptyCartIsRejected(): void
     {
-        $client = static::createClient();
+        $client = CheckoutTest::createClient();
 
         $client->jsonRequest('POST', '/checkout', [
             'email' => 'jo@example.com',
@@ -63,7 +66,7 @@ final class CheckoutTest extends WebTestCase
 
     private function createSchema(): void
     {
-        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $entityManager = CheckoutTest::getContainer()->get(EntityManagerInterface::class);
         $metadata = $entityManager->getMetadataFactory()->getAllMetadata();
         $schemaTool = new SchemaTool($entityManager);
         $schemaTool->dropSchema($metadata);
@@ -75,7 +78,7 @@ final class CheckoutTest extends WebTestCase
      */
     private function recordEmails(\ArrayObject $emails): void
     {
-        static::getContainer()->get('event_dispatcher')->addListener(
+        CheckoutTest::getContainer()->get('event_dispatcher')->addListener(
             MessageEvent::class,
             static function (MessageEvent $event) use ($emails): void {
                 $message = $event->getMessage();
