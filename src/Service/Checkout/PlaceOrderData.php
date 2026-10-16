@@ -3,12 +3,11 @@ declare(strict_types=1);
 
 namespace App\Service\Checkout;
 
+use App\Enum\CustomerType;
 use Symfony\Component\Validator\Constraints as Assert;
 
 final readonly class PlaceOrderData
 {
-    public const CUSTOMER_TYPES = ['regular', 'vip', 'staff', 'trade'];
-
     /**
      * @param list<array{sku: string, price: float|int, qty: int}> $cart
      */
@@ -17,8 +16,8 @@ final readonly class PlaceOrderData
         #[Assert\Email(message: 'Email is not valid.')]
         public string $email,
 
-        #[Assert\Choice(choices: self::CUSTOMER_TYPES, message: 'Customer type is not supported.')]
-        public string $customerType = 'regular',
+        #[Assert\Choice(callback: [CustomerType::class, 'cases'], message: 'Customer type is not supported.')]
+        public CustomerType $customerType = CustomerType::Regular,
 
         #[Assert\Type('array', message: 'Cart must be a list of items.')]
         #[Assert\Count(min: 1, minMessage: 'Cart should not be empty.')]

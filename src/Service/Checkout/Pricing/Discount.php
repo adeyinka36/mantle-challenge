@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Checkout\Pricing;
 
+use App\Enum\CustomerType;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
 
 /**
@@ -12,7 +13,7 @@ use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
 #[AutoconfigureTag('app.checkout.discount')]
 interface Discount
 {
-    public function supports(string $customerType, bool $isSample): bool;
+    public function supports(CustomerType $customerType, bool $isSample): bool;
 
     public function apply(float $subtotal): float;
 }

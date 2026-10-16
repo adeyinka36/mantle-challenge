@@ -3,11 +3,13 @@ declare(strict_types=1);
 
 namespace App\Service\Checkout\Pricing;
 
+use App\Enum\CustomerType;
+
 final class StaffDiscount implements Discount
 {
-    public function supports(string $customerType, bool $isSample): bool
+    public function supports(CustomerType $customerType, bool $isSample): bool
     {
-        return $customerType === 'staff';
+        return $customerType === CustomerType::Staff;
     }
 
     public function apply(float $subtotal): float
