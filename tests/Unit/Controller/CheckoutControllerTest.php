@@ -189,13 +189,17 @@ final class CheckoutControllerTest extends TestCase
         $this->assertSame('jo@example.com', $this->mailer->sent[0]->getTo()[0]->getAddress());
         $this->assertCount(1, $this->smsSender->sent);
         $this->assertSame('07123456789', $this->smsSender->sent[0]['mobile']);
-        $this->assertSame('Thanks for your order! Total: £20.00', $this->smsSender->sent[0]['message']);
+        $this->assertSame(
+            $this->mailer->sent[0]->getTextBody(),
+            $this->smsSender->sent[0]['message'],
+        );
     }
 
     public function testNoSmsIsSentWhenMobileIsMissing(): void
     {
         $this->checkout();
 
+        $this->assertCount(1, $this->mailer->sent);
         $this->assertSame([], $this->smsSender->sent);
     }
 

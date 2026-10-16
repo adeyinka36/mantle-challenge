@@ -33,6 +33,7 @@ final class SendOrderSmsTest extends TestCase
     public function testSendsNothingWhenMobileIsMissing(): void
     {
         ($this->listener)(new OrderPlaced($this->order(), 'jo@example.com'));
+        ($this->listener)(new OrderPlaced($this->order(), 'jo@example.com', ''));
 
         $this->assertSame([], $this->smsSender->sent);
     }
