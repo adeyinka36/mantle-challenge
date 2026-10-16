@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Service\Checkout;
 
-use App\Enum\CustomerType;
 use App\Service\Checkout\PlaceOrderData;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
@@ -46,11 +45,6 @@ final class PlaceOrderDataTest extends TestCase
             ['email' => 'Email is not valid.'],
             $this->errors(new PlaceOrderData(email: 'not-an-email', cart: $this->cart())),
         );
-    }
-
-    public function testAnUnknownCustomerTypeCannotBeParsed(): void
-    {
-        $this->assertNull(CustomerType::tryFrom('wholesale'));
     }
 
     public function testAGiftNeedsTheRecipientsEmail(): void

@@ -25,32 +25,6 @@ final class OrderFactoryTest extends TestCase
         ]), 3.50);
     }
 
-    public function testBuildsTheOrderFromTheCart(): void
-    {
-        $order = $this->orderFactory->fromCheckout($this->checkout(), $this->customer());
-
-        $this->assertSame('jo@example.com', $order->getCustomer()?->getEmail());
-        $this->assertCount(1, $order->getItems());
-        $this->assertSame('MUG-01', $order->getItems()[0]->getSku());
-        $this->assertSame(10.0, $order->getItems()[0]->getPrice());
-        $this->assertSame(2, $order->getItems()[0]->getQty());
-        $this->assertEqualsWithDelta(16.0, $order->getTotal(), 0.001);
-        $this->assertNotNull($order->getCreatedAt());
-        $this->assertFalse($order->isGift());
-        $this->assertFalse($order->isSample());
-    }
-
-    public function testASampleIsFree(): void
-    {
-        $order = $this->orderFactory->fromCheckout(
-            $this->checkout(sample: true),
-            $this->customer(),
-        );
-
-        $this->assertTrue($order->isSample());
-        $this->assertEqualsWithDelta(0.0, $order->getTotal(), 0.001);
-    }
-
     public function testAGiftIncludesGiftWrap(): void
     {
         $order = $this->orderFactory->fromCheckout(

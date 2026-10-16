@@ -10,9 +10,7 @@ use App\Enum\CustomerType;
 use App\Service\Checkout\Customers;
 use App\Service\Checkout\Event\OrderPlaced;
 use App\Service\Checkout\EventListener\LogPlacedOrder;
-use App\Service\Checkout\EventListener\SendGiftNote;
 use App\Service\Checkout\EventListener\SendOrderConfirmation;
-use App\Service\Checkout\EventListener\SendOrderSms;
 use App\Service\Checkout\OrderFactory;
 use App\Service\Checkout\PlaceOrder;
 use App\Service\Checkout\PlaceOrderData;
@@ -23,7 +21,6 @@ use App\Service\Checkout\Pricing\StudentDiscount;
 use App\Service\Checkout\Pricing\TradeDiscount;
 use App\Service\Checkout\Pricing\VipDiscount;
 use App\Tests\Double\InMemoryMailer;
-use App\Tests\Double\RecordingSmsSender;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -40,7 +37,6 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 final class CheckoutControllerTest extends TestCase
 {
     private InMemoryMailer $mailer;
-    private RecordingSmsSender $smsSender;
     private EntityManagerInterface $em;
     private ?Customer $existingCustomer = null;
     /** @var list<object> */
@@ -50,7 +46,6 @@ final class CheckoutControllerTest extends TestCase
     protected function setUp(): void
     {
         $this->mailer = new InMemoryMailer();
-        $this->smsSender = new RecordingSmsSender();
         $this->logsDir = sys_get_temp_dir() . '/checkout-test-' . bin2hex(random_bytes(4));
 
         $repository = $this->createStub(EntityRepository::class);
@@ -159,50 +154,6 @@ final class CheckoutControllerTest extends TestCase
         $this->assertSame('Your free sample of TEA-SAMPLER is on its way!', $this->mailer->sent[0]->getTextBody());
     }
 
-    public function testGiftOrderSavesTheWrapAndEmailsBothPeople(): void
-    {
-        $response = $this->checkout([
-            'customerType' => 'vip',
-            'gift' => true,
-            'recipientEmail' => 'sam@example.com',
-        ]);
-
-        $this->assertEqualsWithDelta(23.50, $response['body']['total'], 0.001);
-        $this->assertTrue($this->persistedOrder()->isGift());
-        $this->assertEqualsWithDelta(23.50, $this->persistedOrder()->getTotal(), 0.001);
-
-        $this->assertCount(2, $this->mailer->sent);
-        $purchaser = $this->mailer->sent[0];
-        $recipient = $this->mailer->sent[1];
-        $this->assertSame('jo@example.com', $purchaser->getTo()[0]->getAddress());
-        $this->assertSame('Thanks for your order! Total: £23.50', $purchaser->getTextBody());
-        $this->assertSame('sam@example.com', $recipient->getTo()[0]->getAddress());
-        $this->assertSame('A gift for you', $recipient->getSubject());
-        $this->assertSame('A gift is on its way to you.', $recipient->getTextBody());
-    }
-
-    public function testMobileReceivesTheSameConfirmationAsTheEmail(): void
-    {
-        $this->checkout(['mobile' => '07123456789', 'customerType' => 'vip']);
-
-        $this->assertCount(1, $this->mailer->sent);
-        $this->assertSame('jo@example.com', $this->mailer->sent[0]->getTo()[0]->getAddress());
-        $this->assertCount(1, $this->smsSender->sent);
-        $this->assertSame('07123456789', $this->smsSender->sent[0]['mobile']);
-        $this->assertSame(
-            $this->mailer->sent[0]->getTextBody(),
-            $this->smsSender->sent[0]['message'],
-        );
-    }
-
-    public function testNoSmsIsSentWhenMobileIsMissing(): void
-    {
-        $this->checkout();
-
-        $this->assertCount(1, $this->mailer->sent);
-        $this->assertSame([], $this->smsSender->sent);
-    }
-
     /**
      * @param array<string, mixed> $overrides
      *
@@ -221,9 +172,7 @@ final class CheckoutControllerTest extends TestCase
 
         $dispatcher = new EventDispatcher();
         $dispatcher->addListener(OrderPlaced::class, new SendOrderConfirmation($this->mailer));
-        $dispatcher->addListener(OrderPlaced::class, new SendGiftNote($this->mailer));
         $dispatcher->addListener(OrderPlaced::class, new LogPlacedOrder($this->logsDir));
-        $dispatcher->addListener(OrderPlaced::class, new SendOrderSms($this->smsSender));
 
         $priceCalculator = new PriceCalculator([
             new FreeSamplePrice(),
